@@ -1,0 +1,92 @@
+name: Build ANGLE
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ main ]
+    paths:
+      - '.github/workflows/build-angle.yml'
+      - 'build-angle-*.sh'
+      - 'setup-angle-mac.sh'
+  pull_request:
+    branches: [ main ]
+    paths:
+      - '.github/workflows/build-angle.yml'
+      - 'build-angle-*.sh'
+      - 'setup-angle-mac.sh'
+
+jobs:
+  build-mac:
+    name: Build ANGLE for macOS
+    runs-on: macos-14
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: Install Dependencies
+        run: |
+          pip install --upgrade pip
+          pip install --upgrade certifi
+
+      - name: Make Scripts Executable
+        run: |
+          chmod +x setup-angle-mac.sh
+          chmod +x build-angle-mac.sh
+
+      - name: Build ANGLE for macOS
+        run: |
+          ./build-angle-mac.sh
+
+      - name: Check Build Output
+        run: |
+          ls -la build/mac/universal/
+          otool -L build/mac/universal/libGLESv2.dylib
+
+      - name: Upload macOS Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: angle-mac
+          path: build/mac/universal/*.dylib
+          retention-days: 7
+
+  build-ios:
+    name: Build ANGLE for iOS
+    runs-on: macos-14
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: Install Dependencies
+        run: |
+          pip install --upgrade pip
+          pip install --upgrade certifi
+
+      - name: Make Scripts Executable
+        run: |
+          chmod +x setup-angle-mac.sh
+          chmod +x build-angle-ios.sh
+
+      - name: Build ANGLE for iOS
+        run: |
+          ./build-angle-ios.sh
+
+      - name: Check Build Output
+        run: |
+          ls -la build/ios/universal/
+
+      - name: Upload iOS Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: angle-ios
+          path: build/ios/universal/*.xcframework
+          retention-days: 7
