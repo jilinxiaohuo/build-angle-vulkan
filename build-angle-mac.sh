@@ -94,7 +94,32 @@ for DYLIB in $DYLIBS; do
         "build/mac/x86_64/$DYLIB"
 done
 
+# Copy headers for all architectures
+echo "Copying headers..."
+
+# Create header directories for each architecture
+mkdir -p build/mac/arm64/include/{EGL,GLES2,GLES3,KHR}
+mkdir -p build/mac/x86_64/include/{EGL,GLES2,GLES3,KHR}
+mkdir -p build/mac/universal/include/{EGL,GLES2,GLES3,KHR}
+
+# Copy headers to each architecture directory
+cp -R angle/include/EGL/*.h build/mac/arm64/include/EGL/
+cp -R angle/include/GLES2/*.h build/mac/arm64/include/GLES2/
+cp -R angle/include/GLES3/*.h build/mac/arm64/include/GLES3/
+cp -R angle/include/KHR/*.h build/mac/arm64/include/KHR/
+
+cp -R angle/include/EGL/*.h build/mac/x86_64/include/EGL/
+cp -R angle/include/GLES2/*.h build/mac/x86_64/include/GLES2/
+cp -R angle/include/GLES3/*.h build/mac/x86_64/include/GLES3/
+cp -R angle/include/KHR/*.h build/mac/x86_64/include/KHR/
+
+cp -R angle/include/EGL/*.h build/mac/universal/include/EGL/
+cp -R angle/include/GLES2/*.h build/mac/universal/include/GLES2/
+cp -R angle/include/GLES3/*.h build/mac/universal/include/GLES3/
+cp -R angle/include/KHR/*.h build/mac/universal/include/KHR/
+
 echo "macOS builds complete! Libraries are available in:"
 echo "  - build/mac/arm64 (for Apple Silicon Macs)"
 echo "  - build/mac/x86_64 (for Intel Macs)"
 echo "  - build/mac/universal (Universal binaries for both architectures)"
+echo "Headers are included in the include directory within each build folder."

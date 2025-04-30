@@ -66,6 +66,29 @@ set COMMON_ARGS=^
 if not exist ..\build\windows\x64 mkdir ..\build\windows\x64
 if not exist ..\build\windows\arm64 mkdir ..\build\windows\arm64
 
+:: Create header directories
+if not exist ..\build\windows\x64\include\EGL mkdir ..\build\windows\x64\include\EGL
+if not exist ..\build\windows\x64\include\GLES2 mkdir ..\build\windows\x64\include\GLES2
+if not exist ..\build\windows\x64\include\GLES3 mkdir ..\build\windows\x64\include\GLES3
+if not exist ..\build\windows\x64\include\KHR mkdir ..\build\windows\x64\include\KHR
+
+if not exist ..\build\windows\arm64\include\EGL mkdir ..\build\windows\arm64\include\EGL
+if not exist ..\build\windows\arm64\include\GLES2 mkdir ..\build\windows\arm64\include\GLES2
+if not exist ..\build\windows\arm64\include\GLES3 mkdir ..\build\windows\arm64\include\GLES3
+if not exist ..\build\windows\arm64\include\KHR mkdir ..\build\windows\arm64\include\KHR
+
+:: Copy headers for both architectures
+echo Copying headers...
+xcopy /Y include\EGL\*.h ..\build\windows\x64\include\EGL\
+xcopy /Y include\GLES2\*.h ..\build\windows\x64\include\GLES2\
+xcopy /Y include\GLES3\*.h ..\build\windows\x64\include\GLES3\
+xcopy /Y include\KHR\*.h ..\build\windows\x64\include\KHR\
+
+xcopy /Y include\EGL\*.h ..\build\windows\arm64\include\EGL\
+xcopy /Y include\GLES2\*.h ..\build\windows\arm64\include\GLES2\
+xcopy /Y include\GLES3\*.h ..\build\windows\arm64\include\GLES3\
+xcopy /Y include\KHR\*.h ..\build\windows\arm64\include\KHR\
+
 :: Build for Windows x64
 echo Building ANGLE for Windows x64...
 call gn gen out/windows-x64 --args="%COMMON_ARGS% target_cpu=\"x64\""
@@ -115,3 +138,4 @@ echo.
 echo Windows builds complete! Files are available in:
 echo   - build\windows\x64 (for Windows x64)
 echo   - build\windows\arm64 (for Windows ARM64)
+echo Headers are included in the include directory within each build folder.

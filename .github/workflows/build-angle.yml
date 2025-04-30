@@ -50,12 +50,15 @@ jobs:
         run: |
           ls -la build/mac/universal/
           otool -L build/mac/universal/libGLESv2.dylib
+          ls -la build/mac/universal/include/
 
       - name: Upload macOS Artifacts
         uses: actions/upload-artifact@v4
         with:
           name: angle-mac
-          path: build/mac/universal/*.dylib
+          path: |
+            build/mac/universal/*.dylib
+            build/mac/universal/include/
           retention-days: 7
 
   build-ios:
@@ -87,6 +90,7 @@ jobs:
       - name: Check Build Output
         run: |
           ls -la build/ios/universal/
+          find build/ios/universal -name "Headers" | xargs ls -la
 
       - name: Upload iOS Artifacts
         uses: actions/upload-artifact@v4
@@ -126,7 +130,9 @@ jobs:
         shell: cmd
         run: |
           dir build\windows\x64
+          dir build\windows\x64\include
           dir build\windows\arm64
+          dir build\windows\arm64\include
 
       - name: Upload Windows x64 Artifacts
         uses: actions/upload-artifact@v4
@@ -135,6 +141,7 @@ jobs:
           path: |
             build/windows/x64/*.dll
             build/windows/x64/*.lib
+            build/windows/x64/include/
           retention-days: 7
 
       - name: Upload Windows ARM64 Artifacts
@@ -144,4 +151,5 @@ jobs:
           path: |
             build/windows/arm64/*.dll
             build/windows/arm64/*.lib
+            build/windows/arm64/include/
           retention-days: 7

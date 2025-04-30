@@ -95,6 +95,20 @@ cp -R out/ios-release-simulator-x86_64/*.framework ../build/ios/simulator-x86_64
 
 cd ..
 
+# Prepare headers
+echo "Preparing headers for frameworks..."
+HEADERS_DIR="build/ios/headers"
+mkdir -p "$HEADERS_DIR/EGL"
+mkdir -p "$HEADERS_DIR/GLES2"
+mkdir -p "$HEADERS_DIR/GLES3"
+mkdir -p "$HEADERS_DIR/KHR"
+
+# Copy ANGLE headers
+cp angle/include/EGL/*.h "$HEADERS_DIR/EGL/"
+cp angle/include/GLES2/*.h "$HEADERS_DIR/GLES2/"
+cp angle/include/GLES3/*.h "$HEADERS_DIR/GLES3/"
+cp angle/include/KHR/*.h "$HEADERS_DIR/KHR/"
+
 # Create XCFrameworks
 echo "Creating XCFrameworks..."
 mkdir -p build/ios/universal
@@ -207,16 +221,39 @@ for FRAMEWORK in $FRAMEWORKS; do
     # Copy the properly formatted plist to the unified XCFramework
     cp "$TEMP_PLIST" "$UNIFIED_XCFRAMEWORK/Info.plist"
 
+    # Add headers to each framework slice
+    for SLICE_DIR in "$UNIFIED_XCFRAMEWORK"/*; do
+        if [ -d "$SLICE_DIR" ]; then
+            FRAMEWORK_DIR=$(find "$SLICE_DIR" -name "*.framework" -type d)
+            if [ -n "$FRAMEWORK_DIR" ]; then
+                HEADERS_DIR_TARGET="$FRAMEWORK_DIR/Headers"
+                mkdir -p "$HEADERS_DIR_TARGET"
+
+                # Copy appropriate headers based on framework name
+                if [[ "$FRAMEWORK_BASE" == "libEGL" ]]; then
+                    cp -R "$HEADERS_DIR/EGL/"* "$HEADERS_DIR_TARGET/"
+                    cp -R "$HEADERS_DIR/KHR/"* "$HEADERS_DIR_TARGET/"
+                elif [[ "$FRAMEWORK_BASE" == "libGLESv2" ]]; then
+                    cp -R "$HEADERS_DIR/GLES2/"* "$HEADERS_DIR_TARGET/"
+                    cp -R "$HEADERS_DIR/GLES3/"* "$HEADERS_DIR_TARGET/"
+                    cp -R "$HEADERS_DIR/KHR/"* "$HEADERS_DIR_TARGET/"
+                fi
+
+                echo "Added headers to $FRAMEWORK_DIR"
+            fi
+        fi
+    done
+
     # Clean up
     rm -rf "$TEMP_DIR"
     rm -rf "build/ios/universal/$FRAMEWORK_BASE-simulator-x86_64.xcframework"
     rm -rf "build/ios/universal/$FRAMEWORK_BASE-simulator-arm64.xcframework"
 
-    echo "Created unified XCFramework: $UNIFIED_XCFRAMEWORK"
+    echo "Created unified XCFramework with headers: $UNIFIED_XCFRAMEWORK"
 done
 
 echo "iOS builds complete! Frameworks are available in:"
 echo "  - build/ios/arm64 (for iOS devices)"
 echo "  - build/ios/simulator-arm64 (for ARM64 simulators)"
 echo "  - build/ios/simulator-x86_64 (for x86_64 simulators)"
-echo "  - build/ios/universal (XCFrameworks for all platforms)"
+echo "  - build/ios/universal (XCFrameworks for all platforms with headers)"

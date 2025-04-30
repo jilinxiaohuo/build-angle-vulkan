@@ -24,8 +24,6 @@ This will generate universal `libEGL.dylib` and `libGLESv2.dylib` binaries (arm6
 
 ## Windows
 
-⚠️ Just a draft for now, not tested yet!
-
 Build from Windows:
 
 ```
