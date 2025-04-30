@@ -73,7 +73,7 @@ echo   }, >> .gclient
 echo ] >> .gclient
 
 echo Syncing ANGLE dependencies with gclient...
-call gclient sync --no-history --with_branch_heads --ignore_locks
+call gclient sync --no-history --with_branch_heads
 
 echo.
 echo ANGLE setup complete!

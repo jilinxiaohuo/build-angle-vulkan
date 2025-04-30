@@ -7,13 +7,17 @@ on:
     paths:
       - '.github/workflows/build-angle.yml'
       - 'build-angle-*.sh'
-      - 'setup-angle-mac.sh'
+      - 'build-angle-*.bat'
+      - 'setup-angle-*.sh'
+      - 'setup-angle-*.bat'
   pull_request:
     branches: [ main ]
     paths:
       - '.github/workflows/build-angle.yml'
       - 'build-angle-*.sh'
-      - 'setup-angle-mac.sh'
+      - 'build-angle-*.bat'
+      - 'setup-angle-*.sh'
+      - 'setup-angle-*.bat'
 
 jobs:
   build-mac:
@@ -89,4 +93,55 @@ jobs:
         with:
           name: angle-ios
           path: build/ios/universal/*.xcframework
+          retention-days: 7
+
+  build-windows:
+    name: Build ANGLE for Windows
+    runs-on: windows-2022
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: Install Visual Studio Components
+        uses: microsoft/setup-msbuild@v1
+
+      - name: Setup Windows Build Environment
+        shell: cmd
+        run: |
+          pip install --upgrade pip
+          pip install pywin32
+
+      - name: Build ANGLE for Windows (x64 and ARM64)
+        shell: cmd
+        run: |
+          call build-angle-windows.bat
+          if %ERRORLEVEL% NEQ 0 exit /b %ERRORLEVEL%
+
+      - name: Check Build Output
+        shell: cmd
+        run: |
+          dir build\windows\x64
+          dir build\windows\arm64
+
+      - name: Upload Windows x64 Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: angle-windows-x64
+          path: |
+            build/windows/x64/*.dll
+            build/windows/x64/*.lib
+          retention-days: 7
+
+      - name: Upload Windows ARM64 Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: angle-windows-arm64
+          path: |
+            build/windows/arm64/*.dll
+            build/windows/arm64/*.lib
           retention-days: 7

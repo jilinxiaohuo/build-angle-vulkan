@@ -6,7 +6,12 @@ SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
 cd "$SCRIPT_DIR"
 
 # Setup ANGLE if needed
-source ./setup-angle-mac.sh
+if [ ! -d "angle" ]; then
+    source ./setup-angle-mac.sh
+else
+    # Add depot_tools to PATH
+    export PATH="$PATH:$SCRIPT_DIR/depot_tools"
+fi
 
 # Go to ANGLE directory
 cd angle

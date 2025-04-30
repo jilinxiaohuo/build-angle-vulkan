@@ -5,6 +5,9 @@ setlocal enabledelayedexpansion
 set SCRIPT_DIR=%~dp0
 cd %SCRIPT_DIR%
 
+:: Set environment variables for using local toolchain
+set DEPOT_TOOLS_WIN_TOOLCHAIN=0
+
 :: Setup ANGLE if needed
 if not exist angle (
     echo ANGLE not found. Running setup script...
@@ -21,10 +24,22 @@ set PATH=%SCRIPT_DIR%depot_tools;%PATH%
 :: Go to ANGLE directory
 cd angle
 
+:: Create the chrome/VERSION file that is required by compute_build_timestamp.py
+if not exist chrome\VERSION (
+    echo Creating mock chrome VERSION file...
+    mkdir chrome 2>nul
+    (
+        echo MAJOR=1
+        echo MINOR=0
+        echo BUILD=0
+        echo PATCH=0
+    ) > chrome\VERSION
+)
+
 :: Common GN args for all Windows builds
 set COMMON_ARGS=^
     is_debug=false ^
-    is_component_build=true ^
+    is_component_build=false ^
     angle_standalone=true ^
     angle_build_tests=false ^
     angle_enable_swiftshader=false ^
@@ -41,8 +56,11 @@ set COMMON_ARGS=^
     angle_enable_metal=false ^
     angle_enable_wgpu=false ^
     angle_enable_d3d11=true ^
-    angle_enable_essl=true ^
-    angle_enable_glsl=true
+    angle_enable_essl=false ^
+    angle_enable_glsl=true ^
+    build_with_chromium=false ^
+    is_clang=true ^
+    clang_use_chrome_plugins=false
 
 :: Create output directories
 if not exist ..\build\windows\x64 mkdir ..\build\windows\x64
@@ -56,7 +74,7 @@ if %ERRORLEVEL% NEQ 0 (
     exit /b 1
 )
 
-call ninja -C out/windows-x64
+call ninja -C out/windows-x64 libEGL libGLESv2
 if %ERRORLEVEL% NEQ 0 (
     echo Failed to build x64 version. Exiting.
     exit /b 1
@@ -66,8 +84,8 @@ if %ERRORLEVEL% NEQ 0 (
 echo Copying x64 files to build directory...
 copy /Y out\windows-x64\libEGL.dll ..\build\windows\x64\
 copy /Y out\windows-x64\libGLESv2.dll ..\build\windows\x64\
-copy /Y out\windows-x64\libGLESv1_CM.dll ..\build\windows\x64\
-copy /Y out\windows-x64\*.lib ..\build\windows\x64\
+copy /Y out\windows-x64\libEGL.dll.lib ..\build\windows\x64\libEGL.lib
+copy /Y out\windows-x64\libGLESv2.dll.lib ..\build\windows\x64\libGLESv2.lib
 
 :: Build for Windows ARM64
 echo Building ANGLE for Windows ARM64...
@@ -77,7 +95,7 @@ if %ERRORLEVEL% NEQ 0 (
     exit /b 1
 )
 
-call ninja -C out/windows-arm64
+call ninja -C out/windows-arm64 libEGL libGLESv2
 if %ERRORLEVEL% NEQ 0 (
     echo Failed to build ARM64 version. Exiting.
     exit /b 1
@@ -87,8 +105,8 @@ if %ERRORLEVEL% NEQ 0 (
 echo Copying ARM64 files to build directory...
 copy /Y out\windows-arm64\libEGL.dll ..\build\windows\arm64\
 copy /Y out\windows-arm64\libGLESv2.dll ..\build\windows\arm64\
-copy /Y out\windows-arm64\libGLESv1_CM.dll ..\build\windows\arm64\
-copy /Y out\windows-arm64\*.lib ..\build\windows\arm64\
+copy /Y out\windows-arm64\libEGL.dll.lib ..\build\windows\arm64\libEGL.lib
+copy /Y out\windows-arm64\libGLESv2.dll.lib ..\build\windows\arm64\libGLESv2.lib
 
 :: Return to script directory
 cd %SCRIPT_DIR%
