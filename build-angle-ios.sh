@@ -95,20 +95,6 @@ cp -R out/ios-release-simulator-x86_64/*.framework ../build/ios/simulator-x86_64
 
 cd ..
 
-# Prepare headers
-echo "Preparing headers for frameworks..."
-HEADERS_DIR="build/ios/headers"
-mkdir -p "$HEADERS_DIR/EGL"
-mkdir -p "$HEADERS_DIR/GLES2"
-mkdir -p "$HEADERS_DIR/GLES3"
-mkdir -p "$HEADERS_DIR/KHR"
-
-# Copy ANGLE headers
-cp angle/include/EGL/*.h "$HEADERS_DIR/EGL/"
-cp angle/include/GLES2/*.h "$HEADERS_DIR/GLES2/"
-cp angle/include/GLES3/*.h "$HEADERS_DIR/GLES3/"
-cp angle/include/KHR/*.h "$HEADERS_DIR/KHR/"
-
 # Create XCFrameworks
 echo "Creating XCFrameworks..."
 mkdir -p build/ios/universal
@@ -221,7 +207,7 @@ for FRAMEWORK in $FRAMEWORKS; do
     # Copy the properly formatted plist to the unified XCFramework
     cp "$TEMP_PLIST" "$UNIFIED_XCFRAMEWORK/Info.plist"
 
-    # Add headers to each framework slice
+    # Add flattened headers to each framework slice
     for SLICE_DIR in "$UNIFIED_XCFRAMEWORK"/*; do
         if [ -d "$SLICE_DIR" ]; then
             FRAMEWORK_DIR=$(find "$SLICE_DIR" -name "*.framework" -type d)
@@ -229,14 +215,14 @@ for FRAMEWORK in $FRAMEWORKS; do
                 HEADERS_DIR_TARGET="$FRAMEWORK_DIR/Headers"
                 mkdir -p "$HEADERS_DIR_TARGET"
 
-                # Copy appropriate headers based on framework name
+                # Copy appropriate headers based on framework name (flattened structure)
                 if [[ "$FRAMEWORK_BASE" == "libEGL" ]]; then
-                    cp -R "$HEADERS_DIR/EGL/"* "$HEADERS_DIR_TARGET/"
-                    cp -R "$HEADERS_DIR/KHR/"* "$HEADERS_DIR_TARGET/"
+                    cp -R angle/include/EGL/*.h "$HEADERS_DIR_TARGET/"
+                    cp -R angle/include/KHR/*.h "$HEADERS_DIR_TARGET/"
                 elif [[ "$FRAMEWORK_BASE" == "libGLESv2" ]]; then
-                    cp -R "$HEADERS_DIR/GLES2/"* "$HEADERS_DIR_TARGET/"
-                    cp -R "$HEADERS_DIR/GLES3/"* "$HEADERS_DIR_TARGET/"
-                    cp -R "$HEADERS_DIR/KHR/"* "$HEADERS_DIR_TARGET/"
+                    cp -R angle/include/GLES2/*.h "$HEADERS_DIR_TARGET/"
+                    cp -R angle/include/GLES3/*.h "$HEADERS_DIR_TARGET/"
+                    cp -R angle/include/KHR/*.h "$HEADERS_DIR_TARGET/"
                 fi
 
                 echo "Added headers to $FRAMEWORK_DIR"
@@ -252,8 +238,57 @@ for FRAMEWORK in $FRAMEWORKS; do
     echo "Created unified XCFramework with headers: $UNIFIED_XCFRAMEWORK"
 done
 
+# Create a standard include directory structure alongside the XCFrameworks
+echo "Creating standard include directory structure..."
+mkdir -p build/ios/universal/include/EGL
+mkdir -p build/ios/universal/include/GLES2
+mkdir -p build/ios/universal/include/GLES3
+mkdir -p build/ios/universal/include/KHR
+
+# Copy headers to the standard include structure
+cp -R angle/include/EGL/*.h build/ios/universal/include/EGL/
+cp -R angle/include/GLES2/*.h build/ios/universal/include/GLES2/
+cp -R angle/include/GLES3/*.h build/ios/universal/include/GLES3/
+cp -R angle/include/KHR/*.h build/ios/universal/include/KHR/
+
+# Create a README in the include directory explaining usage
+cat > "build/ios/universal/include/README.md" << EOL
+# ANGLE Headers for iOS
+
+These headers are organized in a standard structure for cross-platform consistency.
+
+## Usage in Cross-Platform Code
+
+For cross-platform code that needs to compile on multiple platforms (Windows, macOS, iOS),
+include these headers as follows:
+
+\`\`\`c
+#include <EGL/egl.h>
+#include <GLES2/gl2.h>
+\`\`\`
+
+## Integration with Xcode
+
+1. Add this include directory to your Header Search Paths
+2. Link against the ANGLE XCFrameworks (libEGL.xcframework and libGLESv2.xcframework)
+
+## Alternative Usage for iOS-only Code
+
+For iOS-only code, you can also use the framework-style includes:
+
+\`\`\`objc
+#import <libEGL/egl.h>
+#import <libGLESv2/gl2.h>
+\`\`\`
+
+Both approaches will work, but the first is recommended for cross-platform consistency.
+EOL
+
 echo "iOS builds complete! Frameworks are available in:"
 echo "  - build/ios/arm64 (for iOS devices)"
 echo "  - build/ios/simulator-arm64 (for ARM64 simulators)"
 echo "  - build/ios/simulator-x86_64 (for x86_64 simulators)"
-echo "  - build/ios/universal (XCFrameworks for all platforms with headers)"
+echo "  - build/ios/universal (XCFrameworks for all platforms)"
+echo "Headers are available in two formats:"
+echo "  - Standard include structure: build/ios/universal/include/"
+echo "  - Framework-embedded headers: inside each XCFramework"
