@@ -28,10 +28,12 @@ permissions:
 
 jobs:
   get-angle-commit:
-    name: Determine ANGLE Commit Hash
+    name: Determine ANGLE Commit Hash and Check Existing Release
     runs-on: ubuntu-latest
     outputs:
       angle_commit: ${{ steps.get-commit.outputs.angle_commit }}
+      angle_commit_short: ${{ steps.get-commit.outputs.angle_commit_short }}
+      release_exists: ${{ steps.check-release.outputs.release_exists }}
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v3
@@ -53,14 +55,34 @@ jobs:
           git clone --depth 1 https://chromium.googlesource.com/angle/angle temp-angle
           cd temp-angle
           ANGLE_COMMIT=$(git rev-parse HEAD)
+          ANGLE_COMMIT_SHORT=$(git rev-parse --short HEAD)
           echo "angle_commit=$ANGLE_COMMIT" >> $GITHUB_OUTPUT
+          echo "angle_commit_short=$ANGLE_COMMIT_SHORT" >> $GITHUB_OUTPUT
           echo "ANGLE commit hash: $ANGLE_COMMIT"
+          echo "ANGLE short commit hash: $ANGLE_COMMIT_SHORT"
           cd ..
           rm -rf temp-angle
+
+      - name: Check if Release Exists
+        id: check-release
+        run: |
+          RELEASE_EXISTS=$(curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+            "https://api.github.com/repos/${{ github.repository }}/releases/tags/angle-${{ steps.get-commit.outputs.angle_commit }}" | \
+            jq -r '.id')
+
+          if [[ "$RELEASE_EXISTS" == "null" || "$RELEASE_EXISTS" == "" ]]; then
+            echo "Release does not exist"
+            echo "release_exists=false" >> $GITHUB_OUTPUT
+          else
+            echo "Release already exists with ID: $RELEASE_EXISTS"
+            echo "release_exists=true" >> $GITHUB_OUTPUT
+          fi
 
   build-mac:
     name: Build ANGLE for macOS
     needs: [get-angle-commit]
+    # Only run if release doesn't exist
+    if: needs.get-angle-commit.outputs.release_exists == 'false'
     runs-on: macos-14
     steps:
       - name: Checkout Repository
@@ -96,6 +118,9 @@ jobs:
 
       - name: Create macOS Archive
         run: |
+          # Create commit.txt file with the ANGLE commit hash
+          echo "${{ needs.get-angle-commit.outputs.angle_commit }}" > build/mac/universal/commit.txt
+
           # Create zip with contents directly at root
           cd build/mac/universal
           zip -r ../angle-mac-universal.zip *
@@ -111,6 +136,8 @@ jobs:
   build-ios:
     name: Build ANGLE for iOS
     needs: [get-angle-commit]
+    # Only run if release doesn't exist
+    if: needs.get-angle-commit.outputs.release_exists == 'false'
     runs-on: macos-14
     steps:
       - name: Checkout Repository
@@ -145,6 +172,9 @@ jobs:
 
       - name: Create iOS Archive
         run: |
+          # Create commit.txt file with the ANGLE commit hash
+          echo "${{ needs.get-angle-commit.outputs.angle_commit }}" > build/ios/universal/commit.txt
+
           # Create zip with contents directly at root
           cd build/ios/universal
           zip -r ../angle-ios-universal.zip *
@@ -160,6 +190,8 @@ jobs:
   build-windows:
     name: Build ANGLE for Windows
     needs: [get-angle-commit]
+    # Only run if release doesn't exist
+    if: needs.get-angle-commit.outputs.release_exists == 'false'
     runs-on: windows-2022
     steps:
       - name: Checkout Repository
@@ -201,6 +233,11 @@ jobs:
       - name: Create Windows Archives
         shell: powershell
         run: |
+          # Create commit.txt files with the ANGLE commit hash
+          Set-Content -Path "build\windows\x64\commit.txt" -Value "${{ needs.get-angle-commit.outputs.angle_commit }}"
+          Set-Content -Path "build\windows\arm64\commit.txt" -Value "${{ needs.get-angle-commit.outputs.angle_commit }}"
+
+          # Create zip archives
           cd build\windows
           Compress-Archive -Path x64\* -DestinationPath angle-windows-x64.zip
           Compress-Archive -Path arm64\* -DestinationPath angle-windows-arm64.zip
@@ -224,7 +261,8 @@ jobs:
     needs: [get-angle-commit, build-mac, build-ios, build-windows]
     runs-on: ubuntu-latest
     # Run on schedule, manual triggers, or push to main (but not PRs)
-    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && github.ref == 'refs/heads/main')
+    # And only if the release doesn't already exist
+    if: (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && github.ref == 'refs/heads/main')) && needs.get-angle-commit.outputs.release_exists == 'false'
     # Add permissions specifically for this job
     permissions:
       contents: write
@@ -248,26 +286,6 @@ jobs:
           echo "Prepared release assets:"
           ls -la release-assets/
 
-      - name: Get ANGLE Commit Hash
-        run: |
-          echo "Using ANGLE commit: ${{ needs.get-angle-commit.outputs.angle_commit }}"
-          echo "ANGLE_COMMIT=${{ needs.get-angle-commit.outputs.angle_commit }}" >> $GITHUB_ENV
-
-      - name: Check if Release Exists
-        id: check-release
-        run: |
-          RELEASE_EXISTS=$(curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
-            "https://api.github.com/repos/${{ github.repository }}/releases/tags/angle-${{ env.ANGLE_COMMIT }}" | \
-            jq -r '.id')
-
-          if [[ "$RELEASE_EXISTS" == "null" || "$RELEASE_EXISTS" == "" ]]; then
-            echo "Release does not exist"
-            echo "release_exists=false" >> $GITHUB_OUTPUT
-          else
-            echo "Release already exists with ID: $RELEASE_EXISTS"
-            echo "release_exists=true" >> $GITHUB_OUTPUT
-          fi
-
       - name: Get Current Date
         id: date
         run: echo "date=$(date +'%Y-%m-%d')" >> $GITHUB_OUTPUT
@@ -281,7 +299,6 @@ jobs:
 
       - name: Create Release
         id: create-release
-        if: steps.check-release.outputs.release_exists == 'false'
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
@@ -294,9 +311,9 @@ jobs:
           )
 
           # Create release with GitHub CLI
-          gh release create "angle-${{ env.ANGLE_COMMIT }}" \
-            --title "ANGLE Release ${{ steps.date.outputs.date }}" \
-            --notes "Automated build of Google ANGLE from commit [${{ env.ANGLE_COMMIT }}](https://chromium.googlesource.com/angle/angle/+/${{ env.ANGLE_COMMIT }})
+          gh release create "angle-${{ needs.get-angle-commit.outputs.angle_commit }}" \
+            --title "ANGLE ${{ steps.date.outputs.date }} (${{ needs.get-angle-commit.outputs.angle_commit_short }})" \
+            --notes "Automated build of Google ANGLE from commit [${{ needs.get-angle-commit.outputs.angle_commit }}](https://chromium.googlesource.com/angle/angle/+/${{ needs.get-angle-commit.outputs.angle_commit }})
 
             Built on ${{ steps.date.outputs.date }}
 
