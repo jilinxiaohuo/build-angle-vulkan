@@ -21,6 +21,11 @@ on:
       - 'setup-angle-*.sh'
       - 'setup-angle-*.bat'
 
+# Add permissions at the workflow level
+permissions:
+  contents: write
+  packages: read
+
 jobs:
   get-angle-commit:
     name: Determine ANGLE Commit Hash
@@ -220,6 +225,9 @@ jobs:
     runs-on: ubuntu-latest
     # Run on schedule, manual triggers, or push to main (but not PRs)
     if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && github.ref == 'refs/heads/main')
+    # Add permissions specifically for this job
+    permissions:
+      contents: write
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v3
