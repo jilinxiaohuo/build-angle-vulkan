@@ -95,12 +95,42 @@ cp -R out/ios-release-simulator-x86_64/*.framework ../build/ios/simulator-x86_64
 
 cd ..
 
+# Create unified simulator binaries using lipo
+echo "Creating unified simulator binaries..."
+mkdir -p build/ios/simulator-combined
+
+# Get list of all frameworks from simulator-arm64 build
+FRAMEWORKS=$(ls build/ios/simulator-arm64/)
+
+# Create combined simulator frameworks
+for FRAMEWORK in $FRAMEWORKS; do
+    echo "Creating combined simulator framework for $FRAMEWORK..."
+
+    # Extract the base name without the .framework extension
+    FRAMEWORK_BASE=$(basename "$FRAMEWORK" .framework)
+
+    # Create directory structure for the combined simulator framework
+    mkdir -p "build/ios/simulator-combined/$FRAMEWORK"
+
+    # Copy the framework structure from the ARM64 simulator build (we'll replace the binary)
+    cp -R "build/ios/simulator-arm64/$FRAMEWORK/" "build/ios/simulator-combined/"
+
+    # Find binary paths - they should have the same name as the framework
+    ARM64_SIM_BINARY="build/ios/simulator-arm64/$FRAMEWORK/$FRAMEWORK_BASE"
+    X86_64_SIM_BINARY="build/ios/simulator-x86_64/$FRAMEWORK/$FRAMEWORK_BASE"
+    COMBINED_SIM_BINARY="build/ios/simulator-combined/$FRAMEWORK/$FRAMEWORK_BASE"
+
+    # Create the combined binary using lipo
+    lipo -create -output "$COMBINED_SIM_BINARY" "$ARM64_SIM_BINARY" "$X86_64_SIM_BINARY"
+
+    # Verify the architectures in the combined binary
+    echo "Verifying architectures in combined simulator binary:"
+    lipo -info "$COMBINED_SIM_BINARY"
+done
+
 # Create XCFrameworks
 echo "Creating XCFrameworks..."
 mkdir -p build/ios/universal
-
-# Get list of all frameworks from device build
-FRAMEWORKS=$(ls build/ios/arm64/)
 
 # Create XCFramework for each framework
 for FRAMEWORK in $FRAMEWORKS; do
@@ -109,106 +139,17 @@ for FRAMEWORK in $FRAMEWORKS; do
     # Extract the base name without the .framework extension
     FRAMEWORK_BASE=$(basename "$FRAMEWORK" .framework)
 
-    # Remove existing XCFrameworks if they exist
-    rm -rf "build/ios/universal/$FRAMEWORK_BASE-simulator-x86_64.xcframework"
-    rm -rf "build/ios/universal/$FRAMEWORK_BASE-simulator-arm64.xcframework"
+    # Remove existing XCFramework if it exists
     rm -rf "build/ios/universal/$FRAMEWORK_BASE.xcframework"
 
-    # Create separate XCFrameworks because xcodebuild doesn't like bundling both ARM64 and x64 simulator binaries at once
+    # Create XCFramework with device and combined simulator slices
     xcodebuild -create-xcframework \
         -framework "build/ios/arm64/$FRAMEWORK" \
-        -framework "build/ios/simulator-arm64/$FRAMEWORK" \
-        -output "build/ios/universal/$FRAMEWORK_BASE-simulator-arm64.xcframework"
-    xcodebuild -create-xcframework \
-        -framework "build/ios/arm64/$FRAMEWORK" \
-        -framework "build/ios/simulator-x86_64/$FRAMEWORK" \
-        -output "build/ios/universal/$FRAMEWORK_BASE-simulator-x86_64.xcframework"
-
-    # Now manually merge the XCFrameworks to create one that supports all architectures
-    echo "Manually merging XCFrameworks for $FRAMEWORK_BASE to create a unified version..."
-
-    # Create a directory for the unified XCFramework
-    UNIFIED_XCFRAMEWORK="build/ios/universal/$FRAMEWORK_BASE.xcframework"
-    mkdir -p "$UNIFIED_XCFRAMEWORK"
-
-    # Copy the device ARM64 framework
-    ARM64_DIR=$(find "build/ios/universal/$FRAMEWORK_BASE-simulator-arm64.xcframework" -name "ios-arm64" -type d)
-    cp -R "$ARM64_DIR" "$UNIFIED_XCFRAMEWORK/"
-
-    # Copy the simulator ARM64 framework
-    SIM_ARM64_DIR=$(find "build/ios/universal/$FRAMEWORK_BASE-simulator-arm64.xcframework" -name "ios-arm64-simulator" -type d)
-    cp -R "$SIM_ARM64_DIR" "$UNIFIED_XCFRAMEWORK/"
-
-    # Copy the simulator x86_64 framework
-    SIM_X86_64_DIR=$(find "build/ios/universal/$FRAMEWORK_BASE-simulator-x86_64.xcframework" -name "ios-*-simulator" -type d | grep -v arm64)
-    cp -R "$SIM_X86_64_DIR" "$UNIFIED_XCFRAMEWORK/"
-
-    # Now create a proper merged Info.plist using PlistBuddy
-    echo "Creating merged Info.plist for $FRAMEWORK_BASE.xcframework..."
-
-    # Create a temporary directory
-    TEMP_DIR=$(mktemp -d)
-    TEMP_PLIST="$TEMP_DIR/Info.plist"
-
-    # Create a new empty plist file
-    /usr/libexec/PlistBuddy -c "Save" "$TEMP_PLIST"
-
-    # Initialize the plist with required structure
-    /usr/libexec/PlistBuddy -c "Add :CFBundlePackageType string XFWK" "$TEMP_PLIST"
-    /usr/libexec/PlistBuddy -c "Add :XCFrameworkFormatVersion string 1.0" "$TEMP_PLIST"
-    /usr/libexec/PlistBuddy -c "Add :AvailableLibraries array" "$TEMP_PLIST"
-
-    # Add device ARM64 library info - get from the simulator-arm64 xcframework
-    ARM64_PLIST="build/ios/universal/$FRAMEWORK_BASE-simulator-arm64.xcframework/Info.plist"
-    COUNTER=0
-
-    # Add the device ARM64 entry (index 0 in the arm64 xcframework)
-    /usr/libexec/PlistBuddy -c "Add :AvailableLibraries:$COUNTER dict" "$TEMP_PLIST"
-    /usr/libexec/PlistBuddy -c "Add :AvailableLibraries:$COUNTER:LibraryIdentifier string ios-arm64" "$TEMP_PLIST"
-    FRAMEWORK_PATH=$(/usr/libexec/PlistBuddy -c "Print :AvailableLibraries:0:LibraryPath" "$ARM64_PLIST")
-    BINARY_PATH=$(/usr/libexec/PlistBuddy -c "Print :AvailableLibraries:0:BinaryPath" "$ARM64_PLIST")
-    /usr/libexec/PlistBuddy -c "Add :AvailableLibraries:$COUNTER:LibraryPath string $FRAMEWORK_PATH" "$TEMP_PLIST"
-    /usr/libexec/PlistBuddy -c "Add :AvailableLibraries:$COUNTER:BinaryPath string $BINARY_PATH" "$TEMP_PLIST"
-    /usr/libexec/PlistBuddy -c "Add :AvailableLibraries:$COUNTER:SupportedPlatform string ios" "$TEMP_PLIST"
-    /usr/libexec/PlistBuddy -c "Add :AvailableLibraries:$COUNTER:SupportedArchitectures array" "$TEMP_PLIST"
-    /usr/libexec/PlistBuddy -c "Add :AvailableLibraries:$COUNTER:SupportedArchitectures:0 string arm64" "$TEMP_PLIST"
-
-    # Add simulator ARM64 library info
-    COUNTER=$((COUNTER+1))
-    /usr/libexec/PlistBuddy -c "Add :AvailableLibraries:$COUNTER dict" "$TEMP_PLIST"
-    /usr/libexec/PlistBuddy -c "Add :AvailableLibraries:$COUNTER:LibraryIdentifier string ios-arm64-simulator" "$TEMP_PLIST"
-    FRAMEWORK_PATH=$(/usr/libexec/PlistBuddy -c "Print :AvailableLibraries:1:LibraryPath" "$ARM64_PLIST")
-    BINARY_PATH=$(/usr/libexec/PlistBuddy -c "Print :AvailableLibraries:1:BinaryPath" "$ARM64_PLIST")
-    /usr/libexec/PlistBuddy -c "Add :AvailableLibraries:$COUNTER:LibraryPath string $FRAMEWORK_PATH" "$TEMP_PLIST"
-    /usr/libexec/PlistBuddy -c "Add :AvailableLibraries:$COUNTER:BinaryPath string $BINARY_PATH" "$TEMP_PLIST"
-    /usr/libexec/PlistBuddy -c "Add :AvailableLibraries:$COUNTER:SupportedPlatform string ios" "$TEMP_PLIST"
-    /usr/libexec/PlistBuddy -c "Add :AvailableLibraries:$COUNTER:SupportedPlatformVariant string simulator" "$TEMP_PLIST"
-    /usr/libexec/PlistBuddy -c "Add :AvailableLibraries:$COUNTER:SupportedArchitectures array" "$TEMP_PLIST"
-    /usr/libexec/PlistBuddy -c "Add :AvailableLibraries:$COUNTER:SupportedArchitectures:0 string arm64" "$TEMP_PLIST"
-
-    # Add simulator x86_64 library info - get from the simulator-x86_64 xcframework
-    X86_64_PLIST="build/ios/universal/$FRAMEWORK_BASE-simulator-x86_64.xcframework/Info.plist"
-    COUNTER=$((COUNTER+1))
-
-    # Find the simulator slice (index 1)
-    SIM_INDEX=1
-
-    /usr/libexec/PlistBuddy -c "Add :AvailableLibraries:$COUNTER dict" "$TEMP_PLIST"
-    /usr/libexec/PlistBuddy -c "Add :AvailableLibraries:$COUNTER:LibraryIdentifier string ios-x86_64-simulator" "$TEMP_PLIST"
-    FRAMEWORK_PATH=$(/usr/libexec/PlistBuddy -c "Print :AvailableLibraries:$SIM_INDEX:LibraryPath" "$X86_64_PLIST")
-    BINARY_PATH=$(/usr/libexec/PlistBuddy -c "Print :AvailableLibraries:$SIM_INDEX:BinaryPath" "$X86_64_PLIST")
-    /usr/libexec/PlistBuddy -c "Add :AvailableLibraries:$COUNTER:LibraryPath string $FRAMEWORK_PATH" "$TEMP_PLIST"
-    /usr/libexec/PlistBuddy -c "Add :AvailableLibraries:$COUNTER:BinaryPath string $BINARY_PATH" "$TEMP_PLIST"
-    /usr/libexec/PlistBuddy -c "Add :AvailableLibraries:$COUNTER:SupportedPlatform string ios" "$TEMP_PLIST"
-    /usr/libexec/PlistBuddy -c "Add :AvailableLibraries:$COUNTER:SupportedPlatformVariant string simulator" "$TEMP_PLIST"
-    /usr/libexec/PlistBuddy -c "Add :AvailableLibraries:$COUNTER:SupportedArchitectures array" "$TEMP_PLIST"
-    /usr/libexec/PlistBuddy -c "Add :AvailableLibraries:$COUNTER:SupportedArchitectures:0 string x86_64" "$TEMP_PLIST"
-
-    # Copy the properly formatted plist to the unified XCFramework
-    cp "$TEMP_PLIST" "$UNIFIED_XCFRAMEWORK/Info.plist"
+        -framework "build/ios/simulator-combined/$FRAMEWORK" \
+        -output "build/ios/universal/$FRAMEWORK_BASE.xcframework"
 
     # Add flattened headers to each framework slice
-    for SLICE_DIR in "$UNIFIED_XCFRAMEWORK"/*; do
+    for SLICE_DIR in "build/ios/universal/$FRAMEWORK_BASE.xcframework"/*; do
         if [ -d "$SLICE_DIR" ]; then
             FRAMEWORK_DIR=$(find "$SLICE_DIR" -name "*.framework" -type d)
             if [ -n "$FRAMEWORK_DIR" ]; then
@@ -230,12 +171,7 @@ for FRAMEWORK in $FRAMEWORKS; do
         fi
     done
 
-    # Clean up
-    rm -rf "$TEMP_DIR"
-    rm -rf "build/ios/universal/$FRAMEWORK_BASE-simulator-x86_64.xcframework"
-    rm -rf "build/ios/universal/$FRAMEWORK_BASE-simulator-arm64.xcframework"
-
-    echo "Created unified XCFramework with headers: $UNIFIED_XCFRAMEWORK"
+    echo "Created XCFramework with headers: build/ios/universal/$FRAMEWORK_BASE.xcframework"
 done
 
 # Create a standard include directory structure alongside the XCFrameworks
@@ -288,6 +224,7 @@ echo "iOS builds complete! Frameworks are available in:"
 echo "  - build/ios/arm64 (for iOS devices)"
 echo "  - build/ios/simulator-arm64 (for ARM64 simulators)"
 echo "  - build/ios/simulator-x86_64 (for x86_64 simulators)"
+echo "  - build/ios/simulator-combined (combined simulators with both arm64 and x86_64)"
 echo "  - build/ios/universal (XCFrameworks for all platforms)"
 echo "Headers are available in two formats:"
 echo "  - Standard include structure: build/ios/universal/include/"

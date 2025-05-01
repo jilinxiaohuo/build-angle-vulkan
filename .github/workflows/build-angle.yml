@@ -2,6 +2,8 @@ name: Build ANGLE
 
 on:
   workflow_dispatch:
+  schedule:
+    - cron: '0 0 * * *'  # Run every day at midnight UTC
   push:
     branches: [ main ]
     paths:
@@ -20,8 +22,40 @@ on:
       - 'setup-angle-*.bat'
 
 jobs:
+  get-angle-commit:
+    name: Determine ANGLE Commit Hash
+    runs-on: ubuntu-latest
+    outputs:
+      angle_commit: ${{ steps.get-commit.outputs.angle_commit }}
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: Install Git
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y git
+
+      - name: Get Latest ANGLE Commit
+        id: get-commit
+        run: |
+          # Clone just enough of the ANGLE repo to get the latest commit
+          git clone --depth 1 https://chromium.googlesource.com/angle/angle temp-angle
+          cd temp-angle
+          ANGLE_COMMIT=$(git rev-parse HEAD)
+          echo "angle_commit=$ANGLE_COMMIT" >> $GITHUB_OUTPUT
+          echo "ANGLE commit hash: $ANGLE_COMMIT"
+          cd ..
+          rm -rf temp-angle
+
   build-mac:
     name: Build ANGLE for macOS
+    needs: [get-angle-commit]
     runs-on: macos-14
     steps:
       - name: Checkout Repository
@@ -42,27 +76,36 @@ jobs:
           chmod +x setup-angle-mac.sh
           chmod +x build-angle-mac.sh
 
-      - name: Build ANGLE for macOS
+      - name: Build ANGLE for macOS with specific commit
+        env:
+          ANGLE_COMMIT: ${{ needs.get-angle-commit.outputs.angle_commit }}
         run: |
+          echo "Building ANGLE for macOS with commit: $ANGLE_COMMIT"
           ./build-angle-mac.sh
 
       - name: Check Build Output
         run: |
-          ls -la build/mac/universal/
-          otool -L build/mac/universal/libGLESv2.dylib
+          ls -la build/mac/universal/lib/
+          otool -L build/mac/universal/lib/libGLESv2.dylib
           ls -la build/mac/universal/include/
 
-      - name: Upload macOS Artifacts
+      - name: Create macOS Archive
+        run: |
+          # Create zip with contents directly at root
+          cd build/mac/universal
+          zip -r ../angle-mac-universal.zip *
+          cd ../../..
+
+      - name: Upload macOS Archive
         uses: actions/upload-artifact@v4
         with:
-          name: angle-mac
-          path: |
-            build/mac/universal/*.dylib
-            build/mac/universal/include/
+          name: angle-mac-universal
+          path: build/mac/angle-mac-universal.zip
           retention-days: 7
 
   build-ios:
     name: Build ANGLE for iOS
+    needs: [get-angle-commit]
     runs-on: macos-14
     steps:
       - name: Checkout Repository
@@ -83,8 +126,11 @@ jobs:
           chmod +x setup-angle-mac.sh
           chmod +x build-angle-ios.sh
 
-      - name: Build ANGLE for iOS
+      - name: Build ANGLE for iOS with specific commit
+        env:
+          ANGLE_COMMIT: ${{ needs.get-angle-commit.outputs.angle_commit }}
         run: |
+          echo "Building ANGLE for iOS with commit: $ANGLE_COMMIT"
           ./build-angle-ios.sh
 
       - name: Check Build Output
@@ -92,17 +138,23 @@ jobs:
           ls -la build/ios/universal/
           find build/ios/universal -name "Headers" | xargs ls -la
 
-      - name: Upload iOS Artifacts
+      - name: Create iOS Archive
+        run: |
+          # Create zip with contents directly at root
+          cd build/ios/universal
+          zip -r ../angle-ios-universal.zip *
+          cd ../../..
+
+      - name: Upload iOS Archive
         uses: actions/upload-artifact@v4
         with:
-          name: angle-ios
-          path: |
-            build/ios/universal/*.xcframework
-            build/ios/universal/include/
+          name: angle-ios-universal
+          path: build/ios/angle-ios-universal.zip
           retention-days: 7
 
   build-windows:
     name: Build ANGLE for Windows
+    needs: [get-angle-commit]
     runs-on: windows-2022
     steps:
       - name: Checkout Repository
@@ -122,36 +174,126 @@ jobs:
           pip install --upgrade pip
           pip install pywin32
 
-      - name: Build ANGLE for Windows (x64 and ARM64)
+      - name: Build ANGLE for Windows (x64 and ARM64) with specific commit
         shell: cmd
+        env:
+          ANGLE_COMMIT: ${{ needs.get-angle-commit.outputs.angle_commit }}
         run: |
+          echo Building ANGLE for Windows with commit: %ANGLE_COMMIT%
           call build-angle-windows.bat
           if %ERRORLEVEL% NEQ 0 exit /b %ERRORLEVEL%
 
       - name: Check Build Output
         shell: cmd
         run: |
-          dir build\windows\x64
+          dir build\windows\x64\bin
+          dir build\windows\x64\lib
           dir build\windows\x64\include
-          dir build\windows\arm64
+          dir build\windows\arm64\bin
+          dir build\windows\arm64\lib
           dir build\windows\arm64\include
 
-      - name: Upload Windows x64 Artifacts
+      - name: Create Windows Archives
+        shell: powershell
+        run: |
+          cd build\windows
+          Compress-Archive -Path x64\* -DestinationPath angle-windows-x64.zip
+          Compress-Archive -Path arm64\* -DestinationPath angle-windows-arm64.zip
+
+      - name: Upload Windows x64 Archive
         uses: actions/upload-artifact@v4
         with:
           name: angle-windows-x64
-          path: |
-            build/windows/x64/*.dll
-            build/windows/x64/*.lib
-            build/windows/x64/include/
+          path: build/windows/angle-windows-x64.zip
           retention-days: 7
 
-      - name: Upload Windows ARM64 Artifacts
+      - name: Upload Windows ARM64 Archive
         uses: actions/upload-artifact@v4
         with:
           name: angle-windows-arm64
-          path: |
-            build/windows/arm64/*.dll
-            build/windows/arm64/*.lib
-            build/windows/arm64/include/
+          path: build/windows/angle-windows-arm64.zip
           retention-days: 7
+
+  publish-release:
+    name: Publish GitHub Release
+    needs: [get-angle-commit, build-mac, build-ios, build-windows]
+    runs-on: ubuntu-latest
+    # Run on schedule, manual triggers, or push to main (but not PRs)
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && github.ref == 'refs/heads/main')
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v3
+
+      - name: Download All Artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Prepare Release Assets
+        run: |
+          mkdir -p release-assets
+          # Find and copy the artifacts (handle potential nested directories)
+          find artifacts/angle-mac-universal -name "*.zip" -exec cp {} release-assets/angle-mac-universal.zip \;
+          find artifacts/angle-ios-universal -name "*.zip" -exec cp {} release-assets/angle-ios-universal.zip \;
+          find artifacts/angle-windows-x64 -name "*.zip" -exec cp {} release-assets/angle-windows-x64.zip \;
+          find artifacts/angle-windows-arm64 -name "*.zip" -exec cp {} release-assets/angle-windows-arm64.zip \;
+          echo "Prepared release assets:"
+          ls -la release-assets/
+
+      - name: Get ANGLE Commit Hash
+        run: |
+          echo "Using ANGLE commit: ${{ needs.get-angle-commit.outputs.angle_commit }}"
+          echo "ANGLE_COMMIT=${{ needs.get-angle-commit.outputs.angle_commit }}" >> $GITHUB_ENV
+
+      - name: Check if Release Exists
+        id: check-release
+        run: |
+          RELEASE_EXISTS=$(curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+            "https://api.github.com/repos/${{ github.repository }}/releases/tags/angle-${{ env.ANGLE_COMMIT }}" | \
+            jq -r '.id')
+
+          if [[ "$RELEASE_EXISTS" == "null" || "$RELEASE_EXISTS" == "" ]]; then
+            echo "Release does not exist"
+            echo "release_exists=false" >> $GITHUB_OUTPUT
+          else
+            echo "Release already exists with ID: $RELEASE_EXISTS"
+            echo "release_exists=true" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Get Current Date
+        id: date
+        run: echo "date=$(date +'%Y-%m-%d')" >> $GITHUB_OUTPUT
+
+      - name: Install GitHub CLI
+        run: |
+          curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg | sudo dd of=/usr/share/keyrings/githubcli-archive-keyring.gpg
+          echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" | sudo tee /etc/apt/sources.list.d/github-cli.list > /dev/null
+          sudo apt update
+          sudo apt install gh
+
+      - name: Create Release
+        id: create-release
+        if: steps.check-release.outputs.release_exists == 'false'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # Get the files to upload
+          RELEASE_FILES=(
+            "release-assets/angle-mac-universal.zip"
+            "release-assets/angle-ios-universal.zip"
+            "release-assets/angle-windows-x64.zip"
+            "release-assets/angle-windows-arm64.zip"
+          )
+
+          # Create release with GitHub CLI
+          gh release create "angle-${{ env.ANGLE_COMMIT }}" \
+            --title "ANGLE Release ${{ steps.date.outputs.date }}" \
+            --notes "Automated build of Google ANGLE from commit [${{ env.ANGLE_COMMIT }}](https://chromium.googlesource.com/angle/angle/+/${{ env.ANGLE_COMMIT }})
+
+            Built on ${{ steps.date.outputs.date }}
+
+            This release provides prebuilt binaries for:
+            - macOS (Universal)
+            - iOS (ARM64 device + ARM64/x86_64 simulator)
+            - Windows (x64 and ARM64)" \
+            ${RELEASE_FILES[@]}

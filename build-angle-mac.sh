@@ -56,10 +56,10 @@ gn gen out/mac-release-arm64 --args="
 "
 ninja -C out/mac-release-arm64 libEGL libGLESv2
 
-# Copy the dylibs to build directory
-rm -rf ../build/mac/arm64/*
-mkdir -p ../build/mac/arm64
-cp -R out/mac-release-arm64/*.dylib ../build/mac/arm64/
+# Create new directory structure
+rm -rf ../build/mac/arm64/lib
+mkdir -p ../build/mac/arm64/lib
+cp -R out/mac-release-arm64/*.dylib ../build/mac/arm64/lib/
 
 # Build for macOS x86_64
 echo "Building ANGLE for macOS x86_64..."
@@ -70,28 +70,28 @@ gn gen out/mac-release-x86_64 --args="
 "
 ninja -C out/mac-release-x86_64 libEGL libGLESv2
 
-# Copy the dylibs to build directory
-rm -rf ../build/mac/x86_64/*
-mkdir -p ../build/mac/x86_64
-cp -R out/mac-release-x86_64/*.dylib ../build/mac/x86_64/
+# Create new directory structure
+rm -rf ../build/mac/x86_64/lib
+mkdir -p ../build/mac/x86_64/lib
+cp -R out/mac-release-x86_64/*.dylib ../build/mac/x86_64/lib/
 
 # Create universal binaries
 cd ..
 echo "Creating universal binaries..."
-rm -rf build/mac/universal/*
-mkdir -p build/mac/universal
+rm -rf build/mac/universal/lib
+mkdir -p build/mac/universal/lib
 
 # Get a list of all dylibs from the arm64 build
-DYLIBS=$(ls build/mac/arm64/)
+DYLIBS=$(ls build/mac/arm64/lib/)
 
 # For each dylib, create a universal version
 for DYLIB in $DYLIBS; do
     echo "Creating universal binary for $DYLIB..."
 
     # Create universal binary
-    lipo -create -output "build/mac/universal/$DYLIB" \
-        "build/mac/arm64/$DYLIB" \
-        "build/mac/x86_64/$DYLIB"
+    lipo -create -output "build/mac/universal/lib/$DYLIB" \
+        "build/mac/arm64/lib/$DYLIB" \
+        "build/mac/x86_64/lib/$DYLIB"
 done
 
 # Copy headers for all architectures
@@ -119,7 +119,7 @@ cp -R angle/include/GLES3/*.h build/mac/universal/include/GLES3/
 cp -R angle/include/KHR/*.h build/mac/universal/include/KHR/
 
 echo "macOS builds complete! Libraries are available in:"
-echo "  - build/mac/arm64 (for Apple Silicon Macs)"
-echo "  - build/mac/x86_64 (for Intel Macs)"
-echo "  - build/mac/universal (Universal binaries for both architectures)"
+echo "  - build/mac/arm64/lib (for Apple Silicon Macs)"
+echo "  - build/mac/x86_64/lib (for Intel Macs)"
+echo "  - build/mac/universal/lib (Universal binaries for both architectures)"
 echo "Headers are included in the include directory within each build folder."

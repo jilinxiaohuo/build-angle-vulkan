@@ -1,9 +1,9 @@
 #!/bin/bash
 set -e
 
-# Configure commits
-ANGLE_COMMIT="f6da7aed210035a54e406ada571fb34892092c24"
-DEPOT_TOOLS_COMMIT="43d3eba89bc6b4fe34d99f0ee4af0ccc291c528c"
+# Use environment variables for commits if specified, otherwise use latest
+ANGLE_COMMIT=${ANGLE_COMMIT:-""}
+DEPOT_TOOLS_COMMIT=${DEPOT_TOOLS_COMMIT:-""}
 
 # Check if homebrew is installed
 if ! command -v brew &> /dev/null; then
@@ -25,15 +25,27 @@ cd "$SCRIPT_DIR"
 # Clone or update depot_tools
 if [ ! -d "depot_tools" ]; then
     echo "Cloning depot_tools..."
-    git clone https://chromium.googlesource.com/chromium/tools/depot_tools.git
-    cd depot_tools
-    git checkout $DEPOT_TOOLS_COMMIT
-    cd ..
+    git clone --depth 1 https://chromium.googlesource.com/chromium/tools/depot_tools.git
+
+    # Checkout specific commit if provided
+    if [ ! -z "$DEPOT_TOOLS_COMMIT" ]; then
+        cd depot_tools
+        git fetch --depth 1 origin $DEPOT_TOOLS_COMMIT
+        git checkout $DEPOT_TOOLS_COMMIT
+        cd ..
+    fi
 else
-    echo "depot_tools directory already exists, checking out specific commit..."
+    echo "depot_tools directory already exists, updating..."
     cd depot_tools
-    git fetch
-    git checkout $DEPOT_TOOLS_COMMIT
+
+    if [ ! -z "$DEPOT_TOOLS_COMMIT" ]; then
+        echo "Checking out specified commit: $DEPOT_TOOLS_COMMIT"
+        git fetch --depth 1 origin $DEPOT_TOOLS_COMMIT
+        git checkout $DEPOT_TOOLS_COMMIT
+    else
+        echo "Using latest depot_tools"
+        git pull
+    fi
     cd ..
 fi
 
@@ -43,15 +55,27 @@ export PATH="$PATH:$SCRIPT_DIR/depot_tools"
 # Clone or update ANGLE
 if [ ! -d "angle" ]; then
     echo "Cloning ANGLE repository..."
-    git clone https://chromium.googlesource.com/angle/angle
-    cd angle
-    git checkout $ANGLE_COMMIT
-    cd ..
+    git clone --depth 1 https://chromium.googlesource.com/angle/angle
+
+    # Checkout specific commit if provided
+    if [ ! -z "$ANGLE_COMMIT" ]; then
+        cd angle
+        git fetch --depth 1 origin $ANGLE_COMMIT
+        git checkout $ANGLE_COMMIT
+        cd ..
+    fi
 else
-    echo "ANGLE directory already exists, checking out specific commit..."
+    echo "ANGLE directory already exists, updating..."
     cd angle
-    git fetch
-    git checkout $ANGLE_COMMIT
+
+    if [ ! -z "$ANGLE_COMMIT" ]; then
+        echo "Checking out specified commit: $ANGLE_COMMIT"
+        git fetch --depth 1 origin $ANGLE_COMMIT
+        git checkout $ANGLE_COMMIT
+    else
+        echo "Using latest ANGLE"
+        git pull
+    fi
     cd ..
 fi
 
@@ -76,4 +100,11 @@ echo "Syncing ANGLE dependencies with gclient..."
 gclient sync --no-history --with_branch_heads --noprehooks
 
 echo "ANGLE setup complete!"
+cd ..
+
+# Store the current ANGLE commit hash for reference
+cd angle
+CURRENT_ANGLE_COMMIT=$(git rev-parse HEAD)
+echo "Current ANGLE commit: $CURRENT_ANGLE_COMMIT"
+echo $CURRENT_ANGLE_COMMIT > ../.angle_commit
 cd ..

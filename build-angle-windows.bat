@@ -62,9 +62,14 @@ set COMMON_ARGS=^
     is_clang=true ^
     clang_use_chrome_plugins=false
 
-:: Create output directories
-if not exist ..\build\windows\x64 mkdir ..\build\windows\x64
-if not exist ..\build\windows\arm64 mkdir ..\build\windows\arm64
+:: Create output directories with new structure
+if not exist ..\build\windows\x64\bin mkdir ..\build\windows\x64\bin
+if not exist ..\build\windows\x64\lib mkdir ..\build\windows\x64\lib
+if not exist ..\build\windows\x64\include mkdir ..\build\windows\x64\include
+
+if not exist ..\build\windows\arm64\bin mkdir ..\build\windows\arm64\bin
+if not exist ..\build\windows\arm64\lib mkdir ..\build\windows\arm64\lib
+if not exist ..\build\windows\arm64\include mkdir ..\build\windows\arm64\include
 
 :: Create header directories
 if not exist ..\build\windows\x64\include\EGL mkdir ..\build\windows\x64\include\EGL
@@ -103,12 +108,25 @@ if %ERRORLEVEL% NEQ 0 (
     exit /b 1
 )
 
-:: Copy the DLLs and libs to build directory
+:: Copy the DLLs and libs to build directory with new structure
 echo Copying x64 files to build directory...
-copy /Y out\windows-x64\libEGL.dll ..\build\windows\x64\
-copy /Y out\windows-x64\libGLESv2.dll ..\build\windows\x64\
-copy /Y out\windows-x64\libEGL.dll.lib ..\build\windows\x64\libEGL.lib
-copy /Y out\windows-x64\libGLESv2.dll.lib ..\build\windows\x64\libGLESv2.lib
+copy /Y out\windows-x64\libEGL.dll ..\build\windows\x64\bin\
+copy /Y out\windows-x64\libGLESv2.dll ..\build\windows\x64\bin\
+copy /Y out\windows-x64\libEGL.dll.lib ..\build\windows\x64\lib\libEGL.lib
+copy /Y out\windows-x64\libGLESv2.dll.lib ..\build\windows\x64\lib\libGLESv2.lib
+
+:: Copy d3dcompiler_47.dll for x64
+echo Copying d3dcompiler_47.dll for x64...
+if exist "out\windows-x64\d3dcompiler_47.dll" (
+    echo Found d3dcompiler_47.dll in ANGLE build, using it.
+    copy /Y out\windows-x64\d3dcompiler_47.dll ..\build\windows\x64\bin\
+) else if exist "C:\Windows\System32\d3dcompiler_47.dll" (
+    echo d3dcompiler_47.dll not found in ANGLE build, copying from System32.
+    copy /Y "C:\Windows\System32\d3dcompiler_47.dll" ..\build\windows\x64\bin\
+) else (
+    echo ERROR: d3dcompiler_47.dll not found. You need to install the Windows SDK.
+    exit /b 1
+)
 
 :: Build for Windows ARM64
 echo Building ANGLE for Windows ARM64...
@@ -124,18 +142,37 @@ if %ERRORLEVEL% NEQ 0 (
     exit /b 1
 )
 
-:: Copy the DLLs and libs to build directory
+:: Copy the DLLs and libs to build directory with new structure
 echo Copying ARM64 files to build directory...
-copy /Y out\windows-arm64\libEGL.dll ..\build\windows\arm64\
-copy /Y out\windows-arm64\libGLESv2.dll ..\build\windows\arm64\
-copy /Y out\windows-arm64\libEGL.dll.lib ..\build\windows\arm64\libEGL.lib
-copy /Y out\windows-arm64\libGLESv2.dll.lib ..\build\windows\arm64\libGLESv2.lib
+copy /Y out\windows-arm64\libEGL.dll ..\build\windows\arm64\bin\
+copy /Y out\windows-arm64\libGLESv2.dll ..\build\windows\arm64\bin\
+copy /Y out\windows-arm64\libEGL.dll.lib ..\build\windows\arm64\lib\libEGL.lib
+copy /Y out\windows-arm64\libGLESv2.dll.lib ..\build\windows\arm64\lib\libGLESv2.lib
+
+:: Copy d3dcompiler_47.dll for ARM64
+echo Copying d3dcompiler_47.dll for ARM64...
+if exist "out\windows-arm64\d3dcompiler_47.dll" (
+    echo Found d3dcompiler_47.dll in ANGLE ARM64 build, using it.
+    copy /Y out\windows-arm64\d3dcompiler_47.dll ..\build\windows\arm64\bin\
+) else if exist "C:\Windows\SysArm64\d3dcompiler_47.dll" (
+    echo d3dcompiler_47.dll not found in ANGLE ARM64 build, copying from SysArm64.
+    copy /Y "C:\Windows\SysArm64\d3dcompiler_47.dll" ..\build\windows\arm64\bin\
+) else if exist "C:\Windows\System32\d3dcompiler_47.dll" (
+    echo WARNING: Using x64 version of d3dcompiler_47.dll for ARM64 build. This may not work correctly.
+    copy /Y "C:\Windows\System32\d3dcompiler_47.dll" ..\build\windows\arm64\bin\
+) else (
+    echo ERROR: d3dcompiler_47.dll not found. You need to install the Windows SDK.
+    exit /b 1
+)
 
 :: Return to script directory
 cd %SCRIPT_DIR%
 
 echo.
 echo Windows builds complete! Files are available in:
-echo   - build\windows\x64 (for Windows x64)
-echo   - build\windows\arm64 (for Windows ARM64)
-echo Headers are included in the include directory within each build folder.
+echo   - build\windows\x64\bin (DLLs for Windows x64)
+echo   - build\windows\x64\lib (Libraries for Windows x64)
+echo   - build\windows\x64\include (Headers for Windows x64)
+echo   - build\windows\arm64\bin (DLLs for Windows ARM64)
+echo   - build\windows\arm64\lib (Libraries for Windows ARM64)
+echo   - build\windows\arm64\include (Headers for Windows ARM64)

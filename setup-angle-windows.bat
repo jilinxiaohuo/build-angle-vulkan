@@ -1,9 +1,22 @@
 @echo off
 setlocal enabledelayedexpansion
 
-:: Configure commits
-set ANGLE_COMMIT="f6da7aed210035a54e406ada571fb34892092c24"
-set DEPOT_TOOLS_COMMIT="43d3eba89bc6b4fe34d99f0ee4af0ccc291c528c"
+:: Use environment variables for commits if specified, otherwise use latest
+if defined ANGLE_COMMIT (
+    set ANGLE_COMMIT_TO_USE=%ANGLE_COMMIT%
+    echo Using specified ANGLE commit: %ANGLE_COMMIT_TO_USE%
+) else (
+    set ANGLE_COMMIT_TO_USE=
+    echo Using latest ANGLE commit
+)
+
+if defined DEPOT_TOOLS_COMMIT (
+    set DEPOT_TOOLS_COMMIT_TO_USE=%DEPOT_TOOLS_COMMIT%
+    echo Using specified depot_tools commit: %DEPOT_TOOLS_COMMIT_TO_USE%
+) else (
+    set DEPOT_TOOLS_COMMIT_TO_USE=
+    echo Using latest depot_tools commit
+)
 
 :: Get current directory
 set SCRIPT_DIR=%~dp0
@@ -27,15 +40,25 @@ if %ERRORLEVEL% NEQ 0 (
 :: Clone or update depot_tools
 if not exist depot_tools (
     echo Cloning depot_tools...
-    git clone https://chromium.googlesource.com/chromium/tools/depot_tools.git
-    cd depot_tools
-    git checkout %DEPOT_TOOLS_COMMIT%
-    cd ..
+    git clone --depth 1 https://chromium.googlesource.com/chromium/tools/depot_tools.git
+
+    :: Checkout specific commit if provided
+    if defined DEPOT_TOOLS_COMMIT_TO_USE (
+        cd depot_tools
+        git fetch --depth 1 origin %DEPOT_TOOLS_COMMIT_TO_USE%
+        git checkout %DEPOT_TOOLS_COMMIT_TO_USE%
+        cd ..
+    )
 ) else (
-    echo depot_tools directory already exists, checking out specific commit...
+    echo depot_tools directory already exists, updating...
     cd depot_tools
-    git fetch
-    git checkout %DEPOT_TOOLS_COMMIT%
+
+    if defined DEPOT_TOOLS_COMMIT_TO_USE (
+        git fetch --depth 1 origin %DEPOT_TOOLS_COMMIT_TO_USE%
+        git checkout %DEPOT_TOOLS_COMMIT_TO_USE%
+    ) else (
+        git pull
+    )
     cd ..
 )
 
@@ -45,15 +68,25 @@ set PATH=%SCRIPT_DIR%depot_tools;%PATH%
 :: Clone or update ANGLE
 if not exist angle (
     echo Cloning ANGLE repository...
-    git clone https://chromium.googlesource.com/angle/angle
-    cd angle
-    git checkout %ANGLE_COMMIT%
-    cd ..
+    git clone --depth 1 https://chromium.googlesource.com/angle/angle
+
+    :: Checkout specific commit if provided
+    if defined ANGLE_COMMIT_TO_USE (
+        cd angle
+        git fetch --depth 1 origin %ANGLE_COMMIT_TO_USE%
+        git checkout %ANGLE_COMMIT_TO_USE%
+        cd ..
+    )
 ) else (
-    echo ANGLE directory already exists, checking out specific commit...
+    echo ANGLE directory already exists, updating...
     cd angle
-    git fetch
-    git checkout %ANGLE_COMMIT%
+
+    if defined ANGLE_COMMIT_TO_USE (
+        git fetch --depth 1 origin %ANGLE_COMMIT_TO_USE%
+        git checkout %ANGLE_COMMIT_TO_USE%
+    ) else (
+        git pull
+    )
     cd ..
 )
 
@@ -77,4 +110,10 @@ call gclient sync --no-history --with_branch_heads
 
 echo.
 echo ANGLE setup complete!
+
+:: Store the current ANGLE commit hash for reference
+for /f "tokens=*" %%a in ('git rev-parse HEAD') do set CURRENT_ANGLE_COMMIT=%%a
+echo Current ANGLE commit: %CURRENT_ANGLE_COMMIT%
+echo %CURRENT_ANGLE_COMMIT%> ..\.angle_commit
+
 cd %SCRIPT_DIR%
