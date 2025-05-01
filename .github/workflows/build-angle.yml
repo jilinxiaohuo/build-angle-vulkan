@@ -67,7 +67,7 @@ jobs:
         id: check-release
         run: |
           RELEASE_EXISTS=$(curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
-            "https://api.github.com/repos/${{ github.repository }}/releases/tags/angle-${{ steps.get-commit.outputs.angle_commit }}" | \
+            "https://api.github.com/repos/${{ github.repository }}/releases/tags/angle-${{ steps.get-commit.outputs.angle_commit_short }}" | \
             jq -r '.id')
 
           if [[ "$RELEASE_EXISTS" == "null" || "$RELEASE_EXISTS" == "" ]]; then
@@ -311,7 +311,7 @@ jobs:
           )
 
           # Create release with GitHub CLI
-          gh release create "angle-${{ needs.get-angle-commit.outputs.angle_commit }}" \
+          gh release create "angle-${{ needs.get-angle-commit.outputs.angle_commit_short }}" \
             --title "ANGLE ${{ steps.date.outputs.date }} (${{ needs.get-angle-commit.outputs.angle_commit_short }})" \
             --notes "Automated build of Google ANGLE from commit [${{ needs.get-angle-commit.outputs.angle_commit }}](https://chromium.googlesource.com/angle/angle/+/${{ needs.get-angle-commit.outputs.angle_commit }})
 
