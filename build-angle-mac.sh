@@ -92,6 +92,9 @@ for DYLIB in $DYLIBS; do
     lipo -create -output "build/mac/universal/lib/$DYLIB" \
         "build/mac/arm64/lib/$DYLIB" \
         "build/mac/x86_64/lib/$DYLIB"
+
+    # Fix install name if needed
+    install_name_tool -id "@rpath/$DYLIB" "build/mac/universal/lib/$DYLIB"
 done
 
 # Copy headers for all architectures
