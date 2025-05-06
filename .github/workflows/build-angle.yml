@@ -283,6 +283,10 @@ jobs:
           find artifacts/angle-ios-universal -name "*.zip" -exec cp {} release-assets/angle-ios-universal.zip \;
           find artifacts/angle-windows-x64 -name "*.zip" -exec cp {} release-assets/angle-windows-x64.zip \;
           find artifacts/angle-windows-arm64 -name "*.zip" -exec cp {} release-assets/angle-windows-arm64.zip \;
+
+          # Create a separate commit.txt file
+          echo "${{ needs.get-angle-commit.outputs.angle_commit }}" > release-assets/commit.txt
+
           echo "Prepared release assets:"
           ls -la release-assets/
 
@@ -308,6 +312,7 @@ jobs:
             "release-assets/angle-ios-universal.zip"
             "release-assets/angle-windows-x64.zip"
             "release-assets/angle-windows-arm64.zip"
+            "release-assets/commit.txt"
           )
 
           # Create release with GitHub CLI
