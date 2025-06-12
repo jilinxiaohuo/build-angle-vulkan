@@ -83,7 +83,7 @@ jobs:
     needs: [get-angle-commit]
     # Only run if release doesn't exist
     if: needs.get-angle-commit.outputs.release_exists == 'false'
-    runs-on: macos-14
+    runs-on: macos-15
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v3
@@ -138,7 +138,7 @@ jobs:
     needs: [get-angle-commit]
     # Only run if release doesn't exist
     if: needs.get-angle-commit.outputs.release_exists == 'false'
-    runs-on: macos-14
+    runs-on: macos-15
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v3
